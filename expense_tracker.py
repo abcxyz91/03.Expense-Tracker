@@ -3,6 +3,7 @@ import argparse
 import csv
 from datetime import datetime
 from pathlib import Path
+from tabulate import tabulate
 
 """Initialize expense records and budget"""
 records = []
@@ -15,34 +16,44 @@ if Path(file_path).exists():
         reader = csv.DictReader(file)
         for row in reader:
             records.append({
-                "ID": int(row[0]), 
-                "Date": row[1], 
-                "Category": row[2], 
-                "Description": row[3], 
-                "Amount": float(row[4])
+                "ID": int(row["ID"]), 
+                "Date": row["Date"], 
+                "Category": row["Category"], 
+                "Description": row["Description"], 
+                "Amount": float(row["Amount"])
             })
 
 
 def main():
-    """Check valid command-line argument"""
-    if len(sys.argv) < 2:
-        sys.exit("Missing command-line argument")
-    
-    command = sys.argv[1]
-    VALID_COMMAND = ["add", "list", "summary", "delete", "set-budget", "export"]
+    """Setup main parser with description"""
+    parser = argparse.ArgumentParser(description="Simple CLI to track your expense")
 
-    if command not in VALID_COMMAND:
-        sys.exit(f"Program only accepts the following command {VALID_COMMAND}")
+    """Setup subparsers for different commands"""
+    subparsers = parser.add_subparsers(dest="command", required=True, help="Available commands")
 
-    """Parse command-line with functions"""
-    try:
-        if command == "add":
-            if len(sys.argv) < 5 or len(sys.argv) > 5:
-                sys.exit("Usage: expense_tracker.py add <expense_category> <expense_description> <expense_amount>")
-            else:
-                expense_add(sys.argv[2], sys.argv[3], sys.argv[4])
-    except Exception:
-        sys.exit("Missing or invalid command-line arguments")
+    """Parser for add command and its required and optional arguments"""
+    add_parser = subparsers.add_parser("add", help="Add a new expense")
+    add_parser.add_argument("category", type=str, help="Expense category")
+    add_parser.add_argument("description", type=str, help="Expense description")
+    add_parser.add_argument("amount", type=float, help="Expense amount")
+
+    """Parser for list command with no additional argument"""
+    subparsers.add_parser("list", help="List all the expenses")
+
+    """Parser for delete command and its required argument"""
+    delete_parser = subparsers.add_parser("delete", help="Delete an expense by ID")
+    delete_parser.add_argument("id", type=int, help="Expense ID to delete")
+
+    """Parse all arguments"""
+    args = parser.parse_args()
+
+    """Call the functions based on user command"""
+    if args.command == "add":
+        expense_add(args.category, args.description, args.amount)
+    elif args.command == "list":
+        expense_list()
+    elif args.command == "delete":
+        expense_delete(args.id)
 
 
 def expense_save():
@@ -68,9 +79,9 @@ def expense_add(category, description, amount):
     records.append({
         "ID": expense_id,
         "Date": now.strftime("%d/%b/%Y"),
-        "Category": category,
-        "Description": description,
-        "Amount": amount
+        "Category": category.title(),
+        "Description": description.title(),
+        "Amount": f"{amount:.2f}"
     })
     expense_save()
     print(f"Expense added successfully (ID: {expense_id})")
@@ -88,15 +99,28 @@ def expense_add(category, description, amount):
 
 
 def expense_list():
-    pass
+    print(tabulate(records, headers="keys", tablefmt="grid"))
 
 
 def expense_summary():
     pass
 
 
-def expense_delete():
-    pass
+def expense_delete(id):
+    """Delete existing record id"""
+    try:
+        record_id = int(id)
+    except ValueError:
+        sys.exit("Invalid id number")
+    else:
+        for i, record in enumerate(records):
+            if record["ID"] == record_id:
+                del records[i]
+                expense_save()
+                print(f"Expense {id} deleted sucessfully")
+                break
+        else:
+            print("Expense not found")
 
 
 def expense_set_budget():
