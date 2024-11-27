@@ -1,4 +1,4 @@
-import sys
+import json
 import argparse
 import csv
 from datetime import datetime
@@ -7,12 +7,28 @@ from tabulate import tabulate
 
 """Initialize expense records and budget"""
 records = []
-monthly_budget = None
-file_path = "records.csv"
+records_path = "records.csv"
+budget_path = "budget.json"
+
+"""Setup a dictonary for months"""
+months = {
+    1: "January",
+    2: "February",
+    3: "March",
+    4: "April",
+    5: "May",
+    6: "June",
+    7: "July",
+    8: "August",
+    9: "September",
+    10: "October",
+    11: "November",
+    12: "December"
+}
 
 """Load existing expense records from file if it exists"""
-if Path(file_path).exists():
-    with open(file_path, "r") as file:
+if Path(records_path).exists():
+    with open(records_path, "r") as file:
         reader = csv.DictReader(file)
         for row in reader:
             records.append({
@@ -23,6 +39,14 @@ if Path(file_path).exists():
                 "Amount": float(row["Amount"])
             })
 
+"""Load existing budget info from json file if it exists"""
+if Path(budget_path).exists():
+    with open(budget_path, "r") as file:
+        budget = json.load(file)
+        monthly_budget = float(budget["monthly_budget"])
+else:
+    budget = []
+    monthly_budget = None
 
 def main():
     """Setup main parser with description"""
@@ -33,7 +57,7 @@ def main():
 
     """Parser for add command and its required and optional arguments"""
     add_parser = subparsers.add_parser("add", help="Add a new expense")
-    add_parser.add_argument("category", type=str, help="Expense category")
+    add_parser.add_argument("--category", type=str, help="Expense category")
     add_parser.add_argument("description", type=str, help="Expense description")
     add_parser.add_argument("amount", type=float, help="Expense amount")
 
@@ -43,6 +67,15 @@ def main():
     """Parser for delete command and its required argument"""
     delete_parser = subparsers.add_parser("delete", help="Delete an expense by ID")
     delete_parser.add_argument("id", type=int, help="Expense ID to delete")
+
+    """Parser for summary and its optional argument"""
+    summary_parser = subparsers.add_parser("summary", help="Summary expenses")
+    summary_parser.add_argument("--month", type=int, help="Summary by month (1-12)")
+    summary_parser.add_argument("--category", type=str, help="Summary by category")
+
+    """Parser for set budget command and its argument"""
+    budget_parser = subparsers.add_parser("budget", help="Set a monthly budget. 0 means no budget")
+    budget_parser.add_argument("budget_amount", type=float, help="Budget amount")
 
     """Parse all arguments"""
     args = parser.parse_args()
@@ -54,11 +87,15 @@ def main():
         expense_list()
     elif args.command == "delete":
         expense_delete(args.id)
+    elif args.command == "summary":
+        expense_summary(args.month, args.category)
+    elif args.command == "budget":
+        expense_set_budget(args.budget_amount)
 
 
 def expense_save():
     """Save records to the CSV file"""
-    with open(file_path, "w", newline="") as file:
+    with open(records_path, "w", newline="") as file:
         writer = csv.DictWriter(file, fieldnames=["ID", "Date", "Category", "Description", "Amount"])
         writer.writeheader()
         writer.writerows(records)
@@ -66,12 +103,10 @@ def expense_save():
 
 def expense_add(category, description, amount):
     """Validate amount"""
-    try:
-        amount = float(amount)
-        if amount <= 0:
-            raise ValueError("Amount must be greater than 0")
-    except ValueError as e:
-        sys.exit(f"Invalid amount: {e}")
+    if not description.strip():
+        raise ValueError("Expense must have a description")
+    elif amount <= 0:
+        raise ValueError("Amount must be greater than 0")
 
     """Create new record"""
     expense_id = len(records) + 1
@@ -88,47 +123,78 @@ def expense_add(category, description, amount):
 
     """Check if expenses exceed the monthly budget"""
     if monthly_budget is not None:
-        current_month = now.month()
-        current_year = now.year()
+        current_month = now.month
+        current_year = now.year
         this_month_expense = 0
         for record in records:
-            if datetime.strptime(record["Date"], "%d/%b/%Y").month() == current_month and datetime.strptime(record["Date"], "%d/%b/%Y").month() == current_year:
+            if datetime.strptime(record["Date"], "%d/%b/%Y").month == current_month and datetime.strptime(record["Date"], "%d/%b/%Y").year == current_year:
                 this_month_expense += record["Amount"]
         if this_month_expense > monthly_budget:
             print(f"Expense already exceeded this month budget. Current total: {this_month_expense}")
 
 
 def expense_list():
-    print(tabulate(records, headers="keys", tablefmt="grid"))
+    if records:
+        print(tabulate(records, headers="keys", tablefmt="grid"))
+    else:
+        print("No expense recorded")
 
 
-def expense_summary():
-    pass
+def expense_summary(month=None, category=None):
+    """Setup variables"""
+    now = datetime.now()
+    current_year = now.year
+    total_expense = 0
+
+    """Loop through the records and sum the expenses"""
+    if month is not None:
+        if month < 1 or month > 12:
+            raise ValueError("Month must be within 1-12")
+        for record in records:
+            if datetime.strptime(record["Date"], "%d/%b/%Y").month == month and datetime.strptime(record["Date"], "%d/%b/%Y").year == current_year:
+                total_expense += record["Amount"]
+        print(f"Total expenses for {months[month]}: ${total_expense}")
+    elif category is not None:
+        for record in records:
+            if record["Category"] == category.title():
+                total_expense += record["Amount"]
+        print(f"Total expenses for {category}: ${total_expense}")
+    else:
+        for record in records:
+            total_expense += record["Amount"]
+        print(f"Total expense: ${total_expense}")
 
 
 def expense_delete(id):
     """Delete existing record id"""
-    try:
-        record_id = int(id)
-    except ValueError:
-        sys.exit("Invalid id number")
+    for i, record in enumerate(records):
+        if record["ID"] == id:
+            del records[i]
+            expense_save()
+            print(f"Expense {id} deleted sucessfully")
+            return
     else:
-        for i, record in enumerate(records):
-            if record["ID"] == record_id:
-                del records[i]
-                expense_save()
-                print(f"Expense {id} deleted sucessfully")
-                break
+        print("Expense not found")
+
+
+def expense_set_budget(amount):
+    """Set this function to use the global monthly_budget variable"""
+    global monthly_budget
+
+    """Setup monthly budget"""
+    if amount < 0:
+        raise ValueError("Budget amount must be a positive number")
+    with open(budget_path, "w") as file:
+        if amount != 0:
+            budget["monthly_budget"] = amount
+            monthly_budget = amount
+            print(f"Budget is set to ${amount}")
         else:
-            print("Expense not found")
-
-
-def expense_set_budget():
-    pass
-
-
-def expense_export():
-    pass
+            """Remove key if amount is set to 0"""
+            budget.pop("monthly_budget")
+            monthly_budget = None
+            print("Budget removed")
+        json.dump(budget, file, indent=2)
 
 
 if __name__ == "__main__":
