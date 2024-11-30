@@ -96,10 +96,13 @@ def main():
 
 def expense_save():
     """Save records to the CSV file"""
-    with open(records_path, "w", newline="") as file:
-        writer = csv.DictWriter(file, fieldnames=["ID", "Date", "Category", "Description", "Amount"])
-        writer.writeheader()
-        writer.writerows(records)
+    try:
+        with open(records_path, "w", newline="") as file:
+            writer = csv.DictWriter(file, fieldnames=["ID", "Date", "Category", "Description", "Amount"])
+            writer.writeheader()
+            writer.writerows(records)
+    except IOError as e:
+        print(f"Error saving record: {e}")
 
 
 def expense_add(category, description, amount):
