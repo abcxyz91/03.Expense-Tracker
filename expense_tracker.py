@@ -43,9 +43,10 @@ if Path(records_path).exists():
 if Path(budget_path).exists():
     with open(budget_path, "r") as file:
         budget = json.load(file)
-        monthly_budget = float(budget["monthly_budget"])
+        if budget:
+            monthly_budget = float(budget["monthly_budget"])
 else:
-    budget = []
+    budget = {}
     monthly_budget = None
 
 def main():
@@ -105,7 +106,7 @@ def expense_add(category, description, amount):
     """Validate amount"""
     if not description.strip():
         raise ValueError("Expense must have a description")
-    elif amount <= 0:
+    if amount <= 0:
         raise ValueError("Amount must be greater than 0")
 
     """Create new record"""
@@ -128,7 +129,7 @@ def expense_add(category, description, amount):
         this_month_expense = 0
         for record in records:
             if datetime.strptime(record["Date"], "%d/%b/%Y").month == current_month and datetime.strptime(record["Date"], "%d/%b/%Y").year == current_year:
-                this_month_expense += record["Amount"]
+                this_month_expense += float(record["Amount"])
         if this_month_expense > monthly_budget:
             print(f"Expense already exceeded this month budget. Current total: {this_month_expense}")
 
@@ -145,24 +146,31 @@ def expense_summary(month=None, category=None):
     now = datetime.now()
     current_year = now.year
     total_expense = 0
+    filtered_records = []
 
-    """Loop through the records and sum the expenses"""
+    """Check the arguments and append record into filtered_records"""
     if month is not None:
         if month < 1 or month > 12:
             raise ValueError("Month must be within 1-12")
-        for record in records:
-            if datetime.strptime(record["Date"], "%d/%b/%Y").month == month and datetime.strptime(record["Date"], "%d/%b/%Y").year == current_year:
-                total_expense += record["Amount"]
-        print(f"Total expenses for {months[month]}: ${total_expense}")
-    elif category is not None:
-        for record in records:
-            if record["Category"] == category.title():
-                total_expense += record["Amount"]
-        print(f"Total expenses for {category}: ${total_expense}")
-    else:
-        for record in records:
+        
+    for record in records:
+        record_date = datetime.strptime(record["Date"], "%d/%b/%Y")
+        if record_date.year != current_year:
+            continue
+        if month is not None and record_date.month != month:
+            continue
+        if category is not None and record["Category"] != category.title():
+            continue
+        filtered_records.append(record)
+        
+    """Calculate the total_expense and print the result"""
+    if filtered_records:
+        for record in filtered_records:
             total_expense += record["Amount"]
-        print(f"Total expense: ${total_expense}")
+        print(tabulate(filtered_records, headers="keys", tablefmt="grid"))
+        print(f"Total expenses that match current criteria: ${total_expense}")
+    else:
+        print("There are no expenses match the current criteria")
 
 
 def expense_delete(id):
@@ -186,12 +194,12 @@ def expense_set_budget(amount):
         raise ValueError("Budget amount must be a positive number")
     with open(budget_path, "w") as file:
         if amount != 0:
-            budget["monthly_budget"] = amount
+            budget = {"monthly_budget": amount}
             monthly_budget = amount
             print(f"Budget is set to ${amount}")
         else:
             """Remove key if amount is set to 0"""
-            budget.pop("monthly_budget")
+            budget = {}
             monthly_budget = None
             print("Budget removed")
         json.dump(budget, file, indent=2)
