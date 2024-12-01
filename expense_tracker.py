@@ -42,9 +42,12 @@ if Path(records_path).exists():
 """Load existing budget info from json file if it exists"""
 if Path(budget_path).exists():
     with open(budget_path, "r") as file:
-        budget = json.load(file)
-        if budget:
-            monthly_budget = float(budget["monthly_budget"])
+        try:
+            budget = json.load(file)
+            if budget:
+                monthly_budget = float(budget["monthly_budget"])
+        except json.JSONDecodeError:
+            print("Error: Budget file is corrupted.")
 else:
     budget = {}
     monthly_budget = None
